@@ -1,0 +1,44 @@
+version: "3.8"
+
+services:
+  # Google Cloud Pub/Sub Emulator
+  pubsub-emulator:
+    image: gcr.io/google.com/cloudsdktool/cloud-sdk:emulators
+    command: gcloud beta emulators pubsub start --project=local-dev-project --host-port=0.0.0.0:8085
+    ports:
+      - "8085:8085"
+    environment:
+      - PUBSUB_PROJECT_ID=local-dev-project
+
+  # Fake Google Cloud Storage Emulator
+  gcs-emulator:
+    image: fsouza/fake-gcs-server:1.47
+    command: -scheme http -host 0.0.0.0 -port 4443 -public-host localhost
+    ports:
+      - "4443:4443"
+
+  # Your Application Service (where the Cloud Function will run)
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      # Mount your functions directory into the container
+      # This allows for hot-reloading when you change your code
+      - ./functions:/workspace/functions
+    ports:
+      - "8080:8080" # Expose the function's port
+    depends_on:
+      - pubsub-emulator
+      - gcs-emulator
+    environment:
+      # --- GCP Configuration ---
+      - GCP_PROJECT=local-dev-project
+      - STATE_BUCKET_NAME=local-state-bucket # Name of the bucket for the emulator
+      # --- Emulator Configuration ---
+      # These env vars tell the Google Cloud libraries to connect to the emulators
+      - PUBSUB_EMULATOR_HOST=pubsub-emulator:8085
+      - STORAGE_EMULATOR_HOST=http://gcs-emulator:4443
+      # --- Functions Framework Configuration ---
+      - FUNCTION_TARGET=crawl_news
+      - FUNCTION_SOURCE=/workspace/functions/news-crawler/main.py

@@ -3,7 +3,7 @@ name = "news-parser"
 version = "0.1.0"
 description = ""
 authors = [
-    "Your Name <you@example.com>"
+    "Nikolay Konstantinov ntkonstantinov@gmail.com"
 ]
 packages = [{include = "news_parser", from = "src"}]
 
@@ -17,6 +17,7 @@ torch = {version = "^2.5.1", source = "pytorch"}
 functions-framework = "^3.0"
 google-cloud-pubsub = "^2.0"
 google-cloud-storage = "^2.0"
+gunicorn = "^22.0.0"
 
 [[tool.poetry.source]]
 name = "pytorch"

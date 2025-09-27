@@ -1,0 +1,29 @@
+[tool.poetry]
+name = "news-parser"
+version = "0.1.0"
+description = ""
+authors = [
+    "Your Name <you@example.com>"
+]
+packages = [{include = "news_parser", from = "src"}]
+
+[tool.poetry.dependencies]
+python = ">=3.12, <3.13"
+requests = "^2.31.0"
+beautifulsoup4 = "^4.12.3"
+kokoro = "^0.9.4"
+soundfile = "^0.13.1"
+torch = {version = "^2.5.1", source = "pytorch"}
+functions-framework = "^3.0"
+google-cloud-pubsub = "^2.0"
+google-cloud-storage = "^2.0"
+
+[[tool.poetry.source]]
+name = "pytorch"
+url = "https://download.pytorch.org/whl/cu121"
+priority = "explicit"
+
+[build-system]
+requires = ["poetry-core>=1.0.0"]
+build-backend = "poetry.core.masonry.api"
+

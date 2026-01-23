@@ -29,3 +29,8 @@ priority = "explicit"
 requires = ["poetry-core>=1.0.0"]
 build-backend = "poetry.core.masonry.api"
 
+[dependency-groups]
+dev = [
+    "pytest (>=9.0.2,<10.0.0)",
+    "requests-mock (>=1.12.1,<2.0.0)"
+]

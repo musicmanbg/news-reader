@@ -1,7 +1,7 @@
 import json
 import functions_framework
-from scraper import NewsScraper
-from configs import novinite_config
+from .scraper import NewsScraper
+from .configs import novinite_config
 
 @functions_framework.http
 def scrape_news_http(request):
@@ -9,8 +9,11 @@ def scrape_news_http(request):
     HTTP Cloud Function to scrape news.
     """
     try:
+        # Get URL from query parameters or use default archive URL
+        url = request.args.get('url', 'https://www.novinite.com/archives/2025-12-28')
+        
         scraper = NewsScraper(novinite_config)
-        articles = scraper.scrape(novinite_config.base_url)
+        articles = scraper.scrape(url)
         
         # Convert pydantic models to dicts
         articles_data = [article.model_dump() for article in articles]

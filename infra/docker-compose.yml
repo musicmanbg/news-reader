@@ -40,5 +40,5 @@ services:
       - PUBSUB_EMULATOR_HOST=pubsub-emulator:8085
       - STORAGE_EMULATOR_HOST=http://gcs-emulator:4443
       # --- Functions Framework Configuration ---
-      - FUNCTION_TARGET=crawl_news
+      - FUNCTION_TARGET=scrape_news_http
       - FUNCTION_SOURCE=/workspace/src/news_reader/main.py

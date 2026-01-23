@@ -1,0 +1,4 @@
+requests>=2.31.0
+pydantic>=2.0.0
+beautifulsoup4>=4.12.3
+functions-framework>=3.0.0

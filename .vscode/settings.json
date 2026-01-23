@@ -1,0 +1,5 @@
+{
+    "python.analysis.extraPaths": [
+        "./src/news_parser/models"
+    ]
+}

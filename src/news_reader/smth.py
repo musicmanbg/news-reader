@@ -1,5 +1,28 @@
+
+import requests
+
+from models.html_source import HtmlSource
+
+
+def get_html_source(url):
+    headers = {
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36"
+    }
+    response = requests.get(url, headers=headers)
+    return response.text, response.encoding
+
+
 if __name__ == "__main__":
+    url = "https://www.novinite.com/archives/2025-12-28"
     
+    html_content, encoding = get_html_source(url)
+    html = HtmlSource(url=url, html_content=html_content, encoding=encoding)
+    print(html)
+    
+
+
+
+
     print ("hi there!")
 
 #     print ("hi there!")

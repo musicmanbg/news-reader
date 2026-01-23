@@ -23,9 +23,9 @@ services:
       context: .
       dockerfile: Dockerfile
     volumes:
-      # Mount your functions directory into the container
+      # Mount your src directory into the container
       # This allows for hot-reloading when you change your code
-      - ./functions:/workspace/functions
+      - ../src:/workspace/src
     ports:
       - "8080:8080" # Expose the function's port
     depends_on:
@@ -41,4 +41,4 @@ services:
       - STORAGE_EMULATOR_HOST=http://gcs-emulator:4443
       # --- Functions Framework Configuration ---
       - FUNCTION_TARGET=crawl_news
-      - FUNCTION_SOURCE=/workspace/functions/news-crawler/main.py
+      - FUNCTION_SOURCE=/workspace/src/news_reader/main.py

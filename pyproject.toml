@@ -1,15 +1,16 @@
 [tool.poetry]
-name = "news-parser"
+name = "news-reader"
 version = "0.1.0"
 description = ""
 authors = [
-    "Nikolay Konstantinov ntkonstantinov@gmail.com"
+    "Nikolay Konstantinov <ntkonstantinov@gmail.com>"
 ]
-packages = [{include = "news_parser", from = "src"}]
+packages = [{include = "news_reader", from = "src"}]
 
 [tool.poetry.dependencies]
 python = ">=3.12, <3.13"
 requests = "^2.31.0"
+pydantic = "^2.0.0"
 beautifulsoup4 = "^4.12.3"
 kokoro = "^0.9.4"
 soundfile = "^0.13.1"

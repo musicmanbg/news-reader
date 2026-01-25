@@ -1,7 +1,7 @@
 from typing import List, Optional
 import requests
 from bs4 import BeautifulSoup
-from pydantic import BaseModel, HttpUrl
+from pydantic import BaseModel
 
 
 class ScraperConfig(BaseModel):
@@ -13,12 +13,14 @@ class ScraperConfig(BaseModel):
     summary_selector: Optional[str] = None
     category_selector: Optional[str] = None
     date_selector: Optional[str] = None
+    content_selector: Optional[str] = None
 
 
 class Article(BaseModel):
     title: str
     url: str
     summary: Optional[str] = None
+    content: Optional[str] = None
     category: Optional[str] = None
     date: Optional[str] = None
     source: str
@@ -30,6 +32,40 @@ class NewsScraper:
         self.headers = {
             "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/91.0.4472.124 Safari/537.36"
         }
+
+    def scrape_full_text(self, url: str) -> Optional[str]:
+        if not self.config.content_selector:
+            return None
+        
+        try:
+            response = requests.get(url, headers=self.headers)
+            response.raise_for_status()
+            soup = BeautifulSoup(response.content, "html.parser")
+            
+            # Remove script and style elements
+            for script in soup(["script", "style"]):
+                script.decompose()
+            
+            content_elem = soup.select_one(self.config.content_selector)
+            if not content_elem:
+                return None
+            
+            content_text = content_elem.get_text(separator="\n", strip=True)
+
+            # Cleaning logic
+            # 1. remove text fragments from the article's full text: " Share Send to Kindle"
+            content_text = content_text.replace(" Share Send to Kindle", "")
+            
+            # 2. delete everything after this text: " » Be a reporter:"
+            reporter_markers = [" » Be a reporter:", "\u00bb Be a reporter:"]
+            for marker in reporter_markers:
+                if marker in content_text:
+                    content_text = content_text.split(marker)[0]
+            
+            return content_text.strip()
+        except Exception as e:
+            print(f"Error scraping full text from {url}: {e}")
+            return None
 
     def scrape(self, url: str) -> List[Article]:
         response = requests.get(url, headers=self.headers)
@@ -59,7 +95,7 @@ class NewsScraper:
                     if summary_elem:
                         summary = summary_elem.get_text(strip=True)
                 
-                category = None
+                category = "General"
                 if self.config.category_selector:
                     category_elem = item.select_one(self.config.category_selector)
                     if category_elem:
@@ -69,17 +105,21 @@ class NewsScraper:
                 if self.config.date_selector:
                     date_elem = item.select_one(self.config.date_selector)
                     if date_elem:
-                        # Sometimes date is inside text but we just want the text for now
                         date = date_elem.get_text(strip=True)
 
-                articles.append(Article(
+                article = Article(
                     title=title,
                     url=link,
                     summary=summary,
                     category=category,
                     date=date,
                     source=self.config.name
-                ))
+                )
+                
+                # Fetch full content
+                article.content = self.scrape_full_text(link)
+                
+                articles.append(article)
             except Exception as e:
                 print(f"Error parsing item: {e}")
                 continue

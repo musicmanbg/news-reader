@@ -3,3 +3,7 @@ requests
 beautifulsoup4
 pydantic
 flask
+kokoro
+torch
+soundfile
+numpy

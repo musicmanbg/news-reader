@@ -1,9 +1,34 @@
 import json
 import functions_framework
+import hashlib
+import os
+import tempfile
 from datetime import datetime
 from collections import defaultdict
+from flask import send_file, make_response
 from .scraper import NewsScraper
 from .configs import novinite_config
+from .tts import KokoroTTS
+
+# Use a temporary directory for wavs to avoid triggering dev-server reloads
+WAVS_DIR = os.path.join(tempfile.gettempdir(), "news_reader_wavs")
+if not os.path.exists(WAVS_DIR):
+    os.makedirs(WAVS_DIR)
+
+# Initialize TTS globally to avoid reloading the model on every request
+_tts_instance = None
+
+def get_tts():
+    global _tts_instance
+    if _tts_instance is None:
+        try:
+            _tts_instance = KokoroTTS()
+        except Exception as e:
+            print(f"Failed to initialize TTS: {e}")
+    return _tts_instance
+
+def get_article_hash(title):
+    return hashlib.md5(title.encode('utf-8')).hexdigest()
 
 def parse_novinite_date(date_str):
     """
@@ -21,19 +46,57 @@ def parse_novinite_date(date_str):
 @functions_framework.http
 def display_news(request):
     """
-    HTTP Cloud Function to scrape news and return a responsive HTML page.
+    HTTP Cloud Function to scrape news and return a responsive HTML page or handle TTS.
     """
+    action = request.args.get('action')
+    
+    # Handle streaming of audio files
+    if action == 'stream_audio':
+        article_hash = request.args.get('id')
+        if not article_hash:
+            return "Missing article ID", 400
+        
+        file_path = os.path.join(WAVS_DIR, f"{article_hash}.wav")
+        if os.path.exists(file_path):
+            return send_file(file_path, mimetype="audio/wav")
+        return "Audio not found", 404
+
+    # Handle TTS generation/status check
+    if action == 'get_audio':
+        article_hash = request.args.get('id')
+        text = request.form.get('text')
+        
+        if not article_hash:
+            return json.dumps({"error": "Missing ID"}), 400
+        
+        file_path = os.path.join(WAVS_DIR, f"{article_hash}.wav")
+        
+        if os.path.exists(file_path):
+            return json.dumps({"status": "ready", "url": f"?action=stream_audio&id={article_hash}"}), 200
+        
+        if not text:
+            return json.dumps({"error": "Text required for generation"}), 400
+            
+        try:
+            tts = get_tts()
+            if tts is None:
+                return json.dumps({"error": "TTS engine failed to initialize"}), 500
+            tts.generate_wav(text, file_path)
+            return json.dumps({"status": "ready", "url": f"?action=stream_audio&id={article_hash}"}), 200
+        except Exception as e:
+            return json.dumps({"error": str(e)}), 500
+
+    # Default action: Display news
     try:
-        # Get URL from query parameters or use default archive URL
-        url = request.args.get('url', 'https://www.novinite.com/archives/2025-12-28')
+        current_date_str = datetime.now().strftime("%Y-%m-%d")
+        default_url = f'https://www.novinite.com/archives/{current_date_str}'
+        url = request.args.get('url', default_url)
         
         scraper = NewsScraper(novinite_config)
         articles = scraper.scrape(url)
         
-        # Sort articles by date descending
         articles.sort(key=lambda x: parse_novinite_date(x.date), reverse=True)
         
-        # Group articles by category
         categories = defaultdict(list)
         for article in articles:
             categories[article.category].append(article)
@@ -50,13 +113,22 @@ def display_news(request):
             
             for article in categories[cat]:
                 text_content = article.content if hasattr(article, 'content') and article.content else (article.summary if article.summary else "No content available.")
-                content_html += '<div class="card article-card">'
-                content_html += '  <div class="card-body">'
-                content_html += f'    <h4 class="card-title"><a href="{article.url}" target="_blank" class="article-title">{article.title}</a></h4>'
-                content_html += f'    <div class="article-date">{article.date if article.date else ""}</div>'
-                content_html += f'    <div class="article-content">{text_content}</div>'
-                content_html += '  </div>'
-                content_html += '</div>'
+                article_id = get_article_hash(article.title)
+                
+                content_html += f'''
+<div class="card article-card" id="card-{article_id}">
+    <div class="card-body">
+        <h4 class="card-title"><a href="{article.url}" target="_blank" class="article-title">{article.title}</a></h4>
+        <div class="article-date">{article.date if article.date else ""}</div>
+        <div class="article-content" id="text-{article_id}">{text_content}</div>
+        <div class="mt-3 tts-container" id="tts-{article_id}">
+            <button class="btn btn-outline-primary btn-sm read-btn" onclick="readArticle('{article_id}')">Read Article</button>
+            <div class="tts-status mt-2 small text-muted" style="display:none;">Preparing the audio for the text...</div>
+            <audio controls class="mt-2 w-100" style="display:none;"></audio>
+        </div>
+    </div>
+</div>
+'''
 
         html_template = """
 <!DOCTYPE html>
@@ -100,9 +172,48 @@ def display_news(request):
     </footer>
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+    <script>
+        async function readArticle(id) {
+            const container = document.getElementById('tts-' + id);
+            const btn = container.querySelector('.read-btn');
+            const status = container.querySelector('.tts-status');
+            const audio = container.querySelector('audio');
+            const text = document.getElementById('text-' + id).innerText;
+
+            btn.disabled = true;
+            status.style.display = 'block';
+            status.innerText = 'Preparing the audio for the text...';
+
+            try {
+                const formData = new FormData();
+                formData.append('text', text);
+
+                const response = await fetch('?action=get_audio&id=' + id, {
+                    method: 'POST',
+                    body: formData
+                });
+                
+                const data = await response.json();
+                
+                if (data.status === 'ready') {
+                    audio.src = data.url;
+                    audio.style.display = 'block';
+                    status.style.display = 'none';
+                    btn.style.display = 'none';
+                    audio.play();
+                } else {
+                    status.innerText = 'Error: ' + (data.error || 'Unknown error');
+                    btn.disabled = false;
+                }
+            } catch (e) {
+                status.innerText = 'Error: ' + e.message;
+                btn.disabled = false;
+            }
+        }
+    </script>
 </body>
 </html>
-"""
+""";
         full_html = html_template.replace("{{SOURCE}}", novinite_config.name)
         full_html = full_html.replace("{{CATEGORY_LINKS}}", category_links)
         full_html = full_html.replace("{{CONTENT}}", content_html)

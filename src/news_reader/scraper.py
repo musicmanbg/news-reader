@@ -61,6 +61,11 @@ class NewsScraper:
             for marker in reporter_markers:
                 if marker in content_text:
                     content_text = content_text.split(marker)[0]
+
+            # 3. remove unnecessary new lines (normalize to max 2 newlines)
+            import re
+            content_text = re.sub(r'\n{3,}', '\n\n', content_text)
+            content_text = re.sub(r' {2,}', ' ', content_text)
             
             return content_text.strip()
         except Exception as e:

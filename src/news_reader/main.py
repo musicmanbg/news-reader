@@ -5,7 +5,7 @@ import os
 import tempfile
 from datetime import datetime
 from collections import defaultdict
-from flask import send_file, make_response
+from flask import send_file, make_response, request
 from .scraper import NewsScraper
 from .configs import novinite_config
 from .tts import KokoroTTS
@@ -88,9 +88,12 @@ def display_news(request):
 
     # Default action: Display news
     try:
-        current_date_str = datetime.now().strftime("%Y-%m-%d")
-        default_url = f'https://www.novinite.com/archives/{current_date_str}'
-        url = request.args.get('url', default_url)
+        # Get date from query params or default to today
+        selected_date_str = request.args.get('date')
+        if not selected_date_str:
+            selected_date_str = datetime.now().strftime("%Y-%m-%d")
+        
+        url = f'https://www.novinite.com/archives/{selected_date_str}'
         
         scraper = NewsScraper(novinite_config)
         articles = scraper.scrape(url)
@@ -107,15 +110,18 @@ def display_news(request):
             category_links += f'<a class="flex-sm-fill text-sm-center nav-link" href="#{cat_id}">{cat}</a>'
             
         content_html = ""
-        for cat in sorted(categories.keys()):
-            cat_id = cat.replace(" ", "-").lower().replace("/", "-")
-            content_html += f'<h2 id="{cat_id}" class="category-header">{cat}</h2>'
-            
-            for article in categories[cat]:
-                text_content = article.content if hasattr(article, 'content') and article.content else (article.summary if article.summary else "No content available.")
-                article_id = get_article_hash(article.title)
+        if not articles:
+            content_html = f'<div class="alert alert-info">No articles found for {selected_date_str}.</div>'
+        else:
+            for cat in sorted(categories.keys()):
+                cat_id = cat.replace(" ", "-").lower().replace("/", "-")
+                content_html += f'<h2 id="{cat_id}" class="category-header">{cat}</h2>'
                 
-                content_html += f'''
+                for article in categories[cat]:
+                    text_content = article.content if hasattr(article, 'content') and article.content else (article.summary if article.summary else "No content available.")
+                    article_id = get_article_hash(article.title)
+                    
+                    content_html += f'''
 <div class="card article-card" id="card-{article_id}">
     <div class="card-body">
         <h4 class="card-title"><a href="{article.url}" target="_blank" class="article-title">{article.title}</a></h4>
@@ -139,26 +145,38 @@ def display_news(request):
     <title>News Reader - {{SOURCE}}</title>
     <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
     <style>
-        body { background-color: #f8f9fa; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }
-        .category-header { background-color: #007bff; color: white; padding: 10px 15px; border-radius: 5px; margin-top: 30px; margin-bottom: 20px; }
-        .article-card { margin-bottom: 20px; border: none; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }
-        .article-title { color: #333; text-decoration: none; font-weight: bold; }
-        .article-title:hover { color: #0056b3; }
-        .article-date { font-size: 0.85rem; color: #6c757d; }
-        .article-content { margin-top: 15px; border-top: 1px solid #eee; padding-top: 15px; }
-        .navbar { background-color: #343a40 !important; }
-        .nav-pills .nav-link { color: #007bff; }
-        .nav-pills .nav-link:hover { background-color: #e9ecef; }
+        body {{ background-color: #f8f9fa; font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; }}
+        .category-header {{ background-color: #007bff; color: white; padding: 10px 15px; border-radius: 5px; margin-top: 30px; margin-bottom: 20px; }}
+        .article-card {{ margin-bottom: 20px; border: none; box-shadow: 0 2px 4px rgba(0,0,0,0.1); }}
+        .article-title {{ color: #333; text-decoration: none; font-weight: bold; }}
+        .article-title:hover {{ color: #0056b3; }}
+        .article-date {{ font-size: 0.85rem; color: #6c757d; }}
+        .article-content {{ margin-top: 15px; border-top: 1px solid #eee; padding-top: 15px; }}
+        .navbar {{ background-color: #343a40 !important; }}
+        .nav-pills .nav-link {{ color: #007bff; }}
+        .nav-pills .nav-link:hover {{ background-color: #e9ecef; }}
+        .date-picker-container {{ background: white; padding: 15px; border-radius: 8px; box-shadow: 0 2px 4px rgba(0,0,0,0.05); margin-bottom: 20px; }}
     </style>
 </head>
 <body>
     <nav class="navbar navbar-dark bg-dark sticky-top">
         <div class="container">
-            <a class="navbar-brand" href="#">News Reader: {{SOURCE}}</a>
+            <a class="navbar-brand" href="/">News Reader: {{SOURCE}}</a>
         </div>
     </nav>
 
     <div class="container my-4">
+        <div class="date-picker-container d-flex flex-wrap align-items-center justify-content-between">
+            <div class="mb-2 mb-md-0">
+                <span class="fw-bold">Showing news for: </span>
+                <span class="text-primary">{{SELECTED_DATE}}</span>
+            </div>
+            <div class="d-flex align-items-center">
+                <label for="date-select" class="me-2 fw-bold">Select Date:</label>
+                <input type="date" id="date-select" class="form-control form-control-sm" value="{{SELECTED_DATE}}" onchange="changeDate(this.value)">
+            </div>
+        </div>
+
         <nav id="navbar-categories" class="nav nav-pills flex-column flex-sm-row mb-4 p-2 bg-white rounded shadow-sm">
             {{CATEGORY_LINKS}}
         </nav>
@@ -173,6 +191,12 @@ def display_news(request):
 
     <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
     <script>
+        function changeDate(date) {
+            if (date) {
+                window.location.href = '?date=' + date;
+            }
+        }
+
         async function readArticle(id) {
             const container = document.getElementById('tts-' + id);
             const btn = container.querySelector('.read-btn');
@@ -213,10 +237,11 @@ def display_news(request):
     </script>
 </body>
 </html>
-""";
+"""
         full_html = html_template.replace("{{SOURCE}}", novinite_config.name)
         full_html = full_html.replace("{{CATEGORY_LINKS}}", category_links)
         full_html = full_html.replace("{{CONTENT}}", content_html)
+        full_html = full_html.replace("{{SELECTED_DATE}}", selected_date_str)
         
         return full_html, 200, {'Content-Type': 'text/html; charset=utf-8'}
     except Exception as e:

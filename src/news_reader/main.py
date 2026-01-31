@@ -8,7 +8,7 @@ from collections import defaultdict
 from flask import send_file, make_response, request
 from .scraper import NewsScraper
 from .configs import novinite_config
-from .tts import KokoroTTS
+# from .tts import KokoroTTS
 
 # Use a temporary directory for wavs to avoid triggering dev-server reloads
 WAVS_DIR = os.path.join(tempfile.gettempdir(), "news_reader_wavs")
@@ -16,16 +16,16 @@ if not os.path.exists(WAVS_DIR):
     os.makedirs(WAVS_DIR)
 
 # Initialize TTS globally to avoid reloading the model on every request
-_tts_instance = None
+# _tts_instance = None
 
-def get_tts():
-    global _tts_instance
-    if _tts_instance is None:
-        try:
-            _tts_instance = KokoroTTS()
-        except Exception as e:
-            print(f"Failed to initialize TTS: {e}")
-    return _tts_instance
+# def get_tts():
+#     global _tts_instance
+#     if _tts_instance is None:
+#         try:
+#             _tts_instance = KokoroTTS()
+#         except Exception as e:
+#             print(f"Failed to initialize TTS: {e}")
+#     return _tts_instance
 
 def get_article_hash(title):
     return hashlib.md5(title.encode('utf-8')).hexdigest()
@@ -48,6 +48,14 @@ def display_news(request):
     """
     HTTP Cloud Function to scrape news and return a responsive HTML page or handle TTS.
     """
+    # Security Gate: Check for access token
+    expected_token = os.environ.get('ACCESS_TOKEN', 'dev-token-only')
+    provided_token = request.args.get('token') or request.cookies.get('access_token')
+    
+    if provided_token != expected_token:
+        print(f"SECURITY: Unauthorized access attempt from {request.remote_addr}")
+        return "Unauthorized: Please provide a valid token.", 401
+
     action = request.args.get('action')
     
     # Handle streaming of audio files
@@ -78,7 +86,7 @@ def display_news(request):
             return json.dumps({"error": "Text required for generation"}), 400
             
         try:
-            tts = get_tts()
+            # tts = get_tts()
             if tts is None:
                 return json.dumps({"error": "TTS engine failed to initialize"}), 500
             tts.generate_wav(text, file_path)
@@ -128,7 +136,7 @@ def display_news(request):
         <div class="article-date">{article.date if article.date else ""}</div>
         <div class="article-content" id="text-{article_id}">{text_content}</div>
         <div class="mt-3 tts-container" id="tts-{article_id}">
-            <button class="btn btn-outline-primary btn-sm read-btn" onclick="readArticle('{article_id}')">Read Article</button>
+            <button class="btn btn-outline-primary btn-sm read-btn" onclick="readArticle('{article_id}')" disabled>Read Article</button>
             <div class="tts-status mt-2 small text-muted" style="display:none;">Preparing the audio for the text...</div>
             <audio controls class="mt-2 w-100" style="display:none;"></audio>
         </div>
@@ -193,7 +201,11 @@ def display_news(request):
     <script>
         function changeDate(date) {
             if (date) {
-                window.location.href = '?date=' + date;
+                const urlParams = new URLSearchParams(window.location.search);
+                const token = urlParams.get('token');
+                let newUrl = '?date=' + date;
+                if (token) newUrl += '&token=' + token;
+                window.location.href = newUrl;
             }
         }
 
@@ -209,10 +221,15 @@ def display_news(request):
             status.innerText = 'Preparing the audio for the text...';
 
             try {
+                const urlParams = new URLSearchParams(window.location.search);
+                const token = urlParams.get('token');
                 const formData = new FormData();
                 formData.append('text', text);
 
-                const response = await fetch('?action=get_audio&id=' + id, {
+                let fetchUrl = '?action=get_audio&id=' + id;
+                if (token) fetchUrl += '&token=' + token;
+
+                const response = await fetch(fetchUrl, {
                     method: 'POST',
                     body: formData
                 });
@@ -220,7 +237,9 @@ def display_news(request):
                 const data = await response.json();
                 
                 if (data.status === 'ready') {
-                    audio.src = data.url;
+                    let audioUrl = data.url;
+                    if (token) audioUrl += '&token=' + token;
+                    audio.src = audioUrl;
                     audio.style.display = 'block';
                     status.style.display = 'none';
                     btn.style.display = 'none';

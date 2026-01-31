@@ -1,4 +1,4 @@
-from .scraper import ScraperConfig
+from scraper import ScraperConfig
 
 novinite_config = ScraperConfig(
     name="novinite.com",

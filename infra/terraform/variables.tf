@@ -6,5 +6,17 @@ variable "project_id" {
 variable "region" {
   description = "The region to deploy to"
   type        = string
-  default     = "europe-west1"
+  default     = "us-central1"
+}
+
+variable "alert_email" {
+  description = "The email address to send security alerts to"
+  type        = string
+  default     = "ntkonstantinov@gmail.com"
+}
+
+variable "access_token" {
+  description = "The access token for the application"
+  type        = string
+  sensitive   = true
 }
